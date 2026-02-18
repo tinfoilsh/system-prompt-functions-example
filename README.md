@@ -1,6 +1,6 @@
 # System Prompt Injector
 
-A [Tinfoil Function](https://tinfoil.sh) that prepends a secret system prompt to chat completion requests before forwarding them to inference. The system prompt is stored as an enclave secret and templated with a `{{LANGUAGE}}` placeholder controlled by the client via an `X-Language` header.
+A Tinfoil Function that prepends a secret system prompt to chat completion requests before forwarding them to inference. The system prompt is stored as an enclave secret and templated with a `{{LANGUAGE}}` placeholder controlled by the client via an `X-Language` header.
 
 ```
 Client ──EHBP encrypted──▶ Proxy ──encrypted──▶ Function Enclave ──HTTPS──▶ Inference
