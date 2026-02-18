@@ -1,0 +1,37 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>System Prompt Injector Demo</title>
+    <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <h1>AI Chat</h1>
+            <select id="languageSelect">
+                <option value="English">English</option>
+                <option value="French" selected>French</option>
+                <option value="Spanish">Spanish</option>
+                <option value="German">German</option>
+                <option value="Japanese">Japanese</option>
+                <option value="Mandarin Chinese">Mandarin Chinese</option>
+            </select>
+        </div>
+
+        <div class="messages" id="messages"></div>
+
+        <div class="input-area">
+            <input
+                type="text"
+                id="messageInput"
+                placeholder="Type your message..."
+                autocomplete="off"
+            >
+            <button id="sendBtn">Send</button>
+        </div>
+    </div>
+    <script type="module" src="./main.ts"></script>
+</body>
+</html>
