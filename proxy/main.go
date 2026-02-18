@@ -32,8 +32,12 @@ func main() {
 	http.HandleFunc("/v1/chat/completions", proxyHandler)
 	http.HandleFunc("/attestation", attestationHandler)
 
-	log.Println("proxy listening on :8080")
-	log.Fatal(http.ListenAndServe(":8080", nil))
+	port := os.Getenv("PORT")
+	if port == "" {
+		port = "8080"
+	}
+	log.Printf("proxy listening on :%s", port)
+	log.Fatal(http.ListenAndServe(":"+port, nil))
 }
 
 func proxyHandler(w http.ResponseWriter, r *http.Request) {
