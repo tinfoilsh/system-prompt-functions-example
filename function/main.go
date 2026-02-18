@@ -64,7 +64,32 @@ func chatHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// 4. Render system prompt
+	// 4. Check model against allowed models
+	allowedModelsHeader := r.Header.Get("X-Allowed-Models")
+	if allowedModelsHeader != "" {
+		requestedModel, _ := reqBody["model"].(string)
+		allowed := false
+		for _, m := range strings.Split(allowedModelsHeader, ",") {
+			if strings.TrimSpace(m) == requestedModel {
+				allowed = true
+				break
+			}
+		}
+		if !allowed {
+			log.Printf("Model %q not in allowed list %q", requestedModel, allowedModelsHeader)
+			w.Header().Set("Content-Type", "application/json")
+			w.WriteHeader(http.StatusForbidden)
+			json.NewEncoder(w).Encode(map[string]interface{}{
+				"error": map[string]string{
+					"message": fmt.Sprintf("Model %q is not available on your plan", requestedModel),
+					"type":    "forbidden",
+				},
+			})
+			return
+		}
+	}
+
+	// 5. Render system prompt
 	promptTemplate := os.Getenv("SYSTEM_PROMPT_TEMPLATE")
 	if promptTemplate == "" {
 		promptTemplate = defaultSystemPrompt

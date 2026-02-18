@@ -14,6 +14,8 @@ The request body is encrypted end-to-end from client to the function enclave. Th
 
 The function server (`function/main.go`) receives a decrypted chat completion request from tfshim, prepends a system message rendered from `SYSTEM_PROMPT_TEMPLATE` with the `X-Language` header value, and proxies the modified request to Tinfoil inference.
 
+The proxy also enforces model access: it reads the client's `X-User-Tier` header (paid/free) and sets an `X-Allowed-Models` header that the function checks against the model in the request body. Free users can only use `gpt-oss-120b`; paid users can also use `kimi-k2-5`. The proxy can't read the model from the encrypted body — it just sets the policy. The function, which can read the body, enforces it.
+
 ## Quick start
 
 ### 1. Run the proxy
@@ -49,7 +51,7 @@ The root `Dockerfile` builds only the function server. The proxy and client run 
 | Path | Runs in | Description |
 |------|---------|-------------|
 | `function/` | Enclave | Go server — injects system prompt, forwards to inference |
-| `proxy/` | Your backend | Forwards encrypted requests + `X-Language` header to the function enclave |
-| `client/` | Browser | Chat UI with language picker, EHBP encryption via `tinfoil` SDK |
+| `proxy/` | Your backend | Forwards encrypted requests, sets `X-Allowed-Models` based on user tier |
+| `client/` | Browser | Chat UI with language, model, and tier selectors |
 | `Dockerfile` | CI | Builds the function server only |
 | `tinfoil-config.yml` | CI | Enclave config (tfshim + secrets) |

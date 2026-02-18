@@ -14,6 +14,8 @@ const messages = requireElement<HTMLDivElement>("#messages");
 const input = requireElement<HTMLInputElement>("#messageInput");
 const sendButton = requireElement<HTMLButtonElement>("#sendBtn");
 const languageSelect = requireElement<HTMLSelectElement>("#languageSelect");
+const modelSelect = requireElement<HTMLSelectElement>("#modelSelect");
+const paidToggle = requireElement<HTMLInputElement>("#paidToggle");
 
 // Configure the client to attest the FUNCTION enclave (not inference directly).
 // The SDK verifies the function's code via configRepo, fetches its HPKE key,
@@ -129,6 +131,8 @@ async function sendMessage(): Promise<void> {
   }
 
   const language = languageSelect.value;
+  const model = modelSelect.value;
+  const userTier = paidToggle.checked ? "paid" : "free";
 
   input.value = "";
   appendMessage(text, "user");
@@ -156,10 +160,11 @@ async function sendMessage(): Promise<void> {
       headers: {
         "Content-Type": "application/json",
         Accept: "text/event-stream",
-        "X-Language": language, // Controls the system prompt language
+        "X-Language": language,    // Controls the system prompt language
+        "X-User-Tier": userTier,   // Proxy uses this to set allowed models
       },
       body: JSON.stringify({
-        model: "gpt-oss-120b",
+        model,
         messages: [{ role: "user", content: text }],
         stream: true,
       }),

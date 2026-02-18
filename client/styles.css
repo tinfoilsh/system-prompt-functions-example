@@ -37,7 +37,14 @@ body {
     color: #333;
 }
 
-#languageSelect {
+.header-controls {
+    display: flex;
+    gap: 8px;
+    align-items: center;
+}
+
+#languageSelect,
+#modelSelect {
     padding: 8px 12px;
     border: 1px solid #ddd;
     border-radius: 6px;
@@ -46,8 +53,18 @@ body {
     cursor: pointer;
 }
 
-#languageSelect:focus {
+#languageSelect:focus,
+#modelSelect:focus {
     border-color: #007bff;
+}
+
+.tier-toggle {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    font-size: 14px;
+    color: #333;
+    cursor: pointer;
 }
 
 .messages {
