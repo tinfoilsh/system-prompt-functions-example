@@ -16,7 +16,7 @@ const (
 	usageMetricsResponseHeader = "X-Tinfoil-Usage-Metrics"
 
 	// CORS headers allowed in requests
-	allowHeaders = "Accept, Authorization, Content-Type, Ehbp-Encapsulated-Key, X-Tinfoil-Enclave-Url, X-Language"
+	allowHeaders = "Accept, Authorization, Content-Type, Ehbp-Encapsulated-Key, X-Tinfoil-Enclave-Url, X-Language, X-User-Tier"
 
 	// CORS headers exposed to the browser in responses
 	exposeHeaders = "Ehbp-Response-Nonce"
@@ -84,10 +84,9 @@ func proxyHandler(w http.ResponseWriter, r *http.Request) {
 	// Required: Copy encryption headers from the client request
 	copyHeaders(req.Header, r.Header, ehbpRequestHeaders...)
 
-	// Forward the X-Language header to the function enclave
-	if language := r.Header.Get("X-Language"); language != "" {
-		req.Header.Set("X-Language", language)
-	}
+	// Business logic: enrich the upstream request with function-specific headers
+	setLanguageHeader(req.Header, r.Header)
+	setAllowedModelsHeader(req.Header, r.Header)
 
 	resp, err := http.DefaultClient.Do(req)
 	if err != nil {
@@ -143,6 +142,27 @@ func (fw *flushWriter) Write(p []byte) (int, error) {
 		fw.Flush()
 	}
 	return n, err
+}
+
+// setLanguageHeader forwards the client's language preference to the function.
+// The function uses this to template the system prompt.
+func setLanguageHeader(dst, src http.Header) {
+	if language := src.Get("X-Language"); language != "" {
+		dst.Set("X-Language", language)
+	}
+}
+
+// setAllowedModelsHeader determines which models the user can access based on
+// their tier and tells the function via a header. The function enforces this
+// against the model in the (encrypted) request body.
+func setAllowedModelsHeader(dst, src http.Header) {
+	userTier := src.Get("X-User-Tier")
+	if userTier == "paid" {
+		dst.Set("X-Allowed-Models", "gpt-oss-120b,kimi-k2-5")
+	} else {
+		dst.Set("X-Allowed-Models", "gpt-oss-120b")
+	}
+	log.Printf("User tier: %s, allowed models: %s", userTier, dst.Get("X-Allowed-Models"))
 }
 
 func copyHeaders(dst, src http.Header, keys ...string) {

@@ -10,14 +10,24 @@
     <div class="container">
         <div class="header">
             <h1>AI Chat</h1>
-            <select id="languageSelect">
-                <option value="English">English</option>
-                <option value="French" selected>French</option>
-                <option value="Spanish">Spanish</option>
-                <option value="German">German</option>
-                <option value="Japanese">Japanese</option>
-                <option value="Mandarin Chinese">Mandarin Chinese</option>
-            </select>
+            <div class="header-controls">
+                <select id="modelSelect">
+                    <option value="gpt-oss-120b">gpt-oss-120b</option>
+                    <option value="kimi-k2-5">kimi-k2-5</option>
+                </select>
+                <select id="languageSelect">
+                    <option value="English">English</option>
+                    <option value="French" selected>French</option>
+                    <option value="Spanish">Spanish</option>
+                    <option value="German">German</option>
+                    <option value="Japanese">Japanese</option>
+                    <option value="Mandarin Chinese">Mandarin Chinese</option>
+                </select>
+                <label class="tier-toggle">
+                    <input type="checkbox" id="paidToggle">
+                    <span>Paid</span>
+                </label>
+            </div>
         </div>
 
         <div class="messages" id="messages"></div>
