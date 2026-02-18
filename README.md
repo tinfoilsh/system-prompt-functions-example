@@ -43,7 +43,9 @@ Update `enclaveURL` and `configRepo` in `client/main.ts` to point to your deploy
 
 The root `Dockerfile` builds only the function server. The proxy and client run outside the enclave.
 
-1. Configure `TINFOIL_API_KEY` and `SYSTEM_PROMPT_TEMPLATE` as Tinfoil secrets
+1. Configure Tinfoil secrets:
+   - `TINFOIL_API_KEY` — your Tinfoil inference API key
+   - `SYSTEM_PROMPT_TEMPLATE` — In this case: `You are a helpful assistant. Always respond in {{LANGUAGE}}.`
 2. Push a version tag to trigger `.github/workflows/build.yml`, which builds and pushes the Docker image to GHCR, then creates a Sigstore attestation via `tinfoilsh/pri-build-action`
 
 ## Structure
