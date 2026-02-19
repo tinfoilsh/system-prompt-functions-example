@@ -5,7 +5,7 @@ memory: 16384
 
 containers:
   - name: "function"
-    image: "ghcr.io/tinfoilsh/system-prompt-injector:0.0.5"
+    image: "ghcr.io/tinfoilsh/system-prompt-injector:0.0.7"
     env:
       - TINFOIL_INFERENCE_URL: "https://inference.tinfoil.sh"
     secrets:
