@@ -8,16 +8,10 @@ import (
 	"log"
 	"net/http"
 	"os"
-	"regexp"
 	"strings"
 )
 
-const (
-	defaultSystemPrompt = "You are a helpful assistant. Always respond in {{LANGUAGE}}."
-	maxLanguageLen      = 64
-)
-
-var languageRegex = regexp.MustCompile(`^[a-zA-Z][a-zA-Z \-]*$`)
+const defaultSystemPrompt = "You are a helpful assistant. Always respond in {{LANGUAGE}}."
 
 func main() {
 	http.HandleFunc("/healthz", func(w http.ResponseWriter, r *http.Request) {
@@ -37,14 +31,10 @@ func chatHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// 1. Read and validate language header
+	// 1. Read language header
 	language := r.Header.Get("X-Language")
 	if language == "" {
 		language = "English"
-	}
-	if len(language) > maxLanguageLen || !languageRegex.MatchString(language) {
-		http.Error(w, "Invalid X-Language header", http.StatusBadRequest)
-		return
 	}
 
 	// 2. Read request body (already decrypted by tfshim)
@@ -104,12 +94,7 @@ func chatHandler(w http.ResponseWriter, r *http.Request) {
 	}
 	reqBody["messages"] = append([]interface{}{systemMessage}, messages...)
 
-	// 7. Override model if configured
-	if model := os.Getenv("TINFOIL_MODEL"); model != "" {
-		reqBody["model"] = model
-	}
-
-	// 8. Marshal modified body
+	// 7. Marshal modified body
 	modifiedBody, err := json.Marshal(reqBody)
 	if err != nil {
 		log.Printf("Failed to marshal modified body: %v", err)
@@ -117,15 +102,10 @@ func chatHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// 9. Forward to inference (plain HTTPS — already inside the enclave)
+	// 8. Forward to inference
 	inferenceURL := os.Getenv("TINFOIL_INFERENCE_URL")
 	if inferenceURL == "" {
 		http.Error(w, "TINFOIL_INFERENCE_URL not configured", http.StatusInternalServerError)
-		return
-	}
-	apiKey := os.Getenv("TINFOIL_API_KEY")
-	if apiKey == "" {
-		http.Error(w, "TINFOIL_API_KEY not configured", http.StatusInternalServerError)
 		return
 	}
 
@@ -138,7 +118,7 @@ func chatHandler(w http.ResponseWriter, r *http.Request) {
 	}
 
 	upstreamReq.Header.Set("Content-Type", "application/json")
-	upstreamReq.Header.Set("Authorization", "Bearer "+apiKey)
+	upstreamReq.Header.Set("Authorization", r.Header.Get("Authorization"))
 	if accept := r.Header.Get("Accept"); accept != "" {
 		upstreamReq.Header.Set("Accept", accept)
 	}
@@ -151,7 +131,7 @@ func chatHandler(w http.ResponseWriter, r *http.Request) {
 	}
 	defer resp.Body.Close()
 
-	// 10. Stream response back — tfshim re-encrypts via EHBP transparently
+	// 9. Stream response back
 	if ct := resp.Header.Get("Content-Type"); ct != "" {
 		w.Header().Set("Content-Type", ct)
 	}
