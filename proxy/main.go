@@ -175,7 +175,7 @@ func attestationHandler(w http.ResponseWriter, r *http.Request) {
 	log.Printf("Received attestation %s request from %s", r.Method, r.RemoteAddr)
 
 	w.Header().Set("Access-Control-Allow-Origin", "*")
-	w.Header().Set("Access-Control-Allow-Methods", "GET, OPTIONS")
+	w.Header().Set("Access-Control-Allow-Methods", "GET, POST, OPTIONS")
 	w.Header().Set("Access-Control-Allow-Headers", "Content-Type")
 
 	if r.Method == http.MethodOptions {
@@ -183,12 +183,22 @@ func attestationHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if r.Method != http.MethodGet {
+	if r.Method != http.MethodGet && r.Method != http.MethodPost {
 		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
 		return
 	}
 
-	resp, err := http.Get("https://atc.tinfoil.sh/attestation")
+	req, err := http.NewRequest(r.Method, "https://atc.tinfoil.sh/attestation", r.Body)
+	if err != nil {
+		log.Printf("Failed to create attestation request: %v", err)
+		http.Error(w, "Failed to create attestation request", http.StatusInternalServerError)
+		return
+	}
+	if r.Method == http.MethodPost {
+		req.Header.Set("Content-Type", "application/json")
+	}
+
+	resp, err := http.DefaultClient.Do(req)
 	if err != nil {
 		log.Printf("Failed to fetch attestation bundle: %v", err)
 		http.Error(w, "Failed to fetch attestation bundle", http.StatusBadGateway)

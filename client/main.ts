@@ -24,7 +24,7 @@ const paidToggle = requireElement<HTMLInputElement>("#paidToggle");
 const client = new SecureClient({
   baseURL: "http://localhost:8080/",
   attestationBundleURL: "http://localhost:8080",
-  configRepo: "tinfoilsh/system-prompt-functions-example", // verify the function's code, not the model-router
+  configRepo: "tinfoilsh/system-prompt-functions-example", // verify the function's code
   enclaveURL: "https://system-prompt-injector.tinfoil.functions.tinfoil.sh", // function enclave
 });
 
