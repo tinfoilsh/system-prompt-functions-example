@@ -9,7 +9,6 @@ containers:
     env:
       - TINFOIL_INFERENCE_URL: "https://inference.tinfoil.sh"
     secrets:
-      - TINFOIL_API_KEY
       - SYSTEM_PROMPT_TEMPLATE
 
 shim:
