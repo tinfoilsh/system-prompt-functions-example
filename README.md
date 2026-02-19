@@ -1,76 +1,21 @@
 # System Prompt Injector
 
-## The problem
+With the [basic encrypted proxy](https://github.com/tinfoilsh/encrypted-request-proxy-example), your backend forwards encrypted inference requests without being able to read or modify the request body. But sometimes you need to operate on the request body, such as, inject a system prompt, enforce which models a user can access, or transform the request before it reaches inference.
 
-With the [basic encrypted proxy](https://github.com/tinfoilsh/encrypted-request-proxy-example), your backend forwards encrypted inference requests without being able to read or modify them. But sometimes you need to operate on the request body — inject a system prompt, enforce which models a user can access, or transform the request before it reaches inference.
+## The solution: Preprocessing via Tinfoil Functions
 
-## The solution: Tinfoil Functions
-
-A Tinfoil Function is your code running inside an attested enclave. It receives the decrypted request body, processes it, and forwards the result to inference. The client attests your function's code before encrypting to it — verifying *what* will process its request.
+A Tinfoil Function is your code running inside an attested enclave. It receives the decrypted request body, processes it, and forwards the result to inference. Because this pre-processing hook is running in a secure enclave, the same security guarantees of inference are maintained.
 
 This example demonstrates two use cases:
 
-1. **System prompt injection** — The function injects a secret system prompt (stored as an enclave secret) into every request. The client influences it via a language preference header, but never sees or controls the prompt itself.
+1. **System prompt injection**: The function injects a server-side system prompt (stored as an enclave secret) into every request. The client influences it via a language preference header, but never sees or controls the prompt itself.
 
-2. **Model access control** — The proxy determines which models a user can access (based on their tier) and communicates this to the function via a header. The function reads the model from the decrypted body and rejects unauthorized requests. The proxy sets the policy; the function enforces it.
+2. **Model access control**: The proxy determines which models a user can access (based on their tier) and communicates this to the function via a header. The function reads the model from the decrypted body and rejects unauthorized requests. The proxy sets the policy and the function enforces it.
 
-```
-Client ──EHBP encrypted──▶ Proxy ──encrypted──▶ Function Enclave ──HTTPS──▶ Inference
-                           (can't read body)     (decrypts, injects
-                                                  system prompt)
-```
 
 ## Request flow
 
-```
- Client (browser)                 Your Backend Proxy           Function Enclave              Inference
- ─────────────────                ──────────────────           ────────────────              ─────────
-       │                               │                              │                          │
-       │  Plaintext headers:           │                              │                          │
-       │    X-Language: French         │                              │                          │
-       │    X-User-Tier: paid          │                              │                          │
-       │  Encrypted body:              │                              │                          │
-       │    {"model":"kimi-k2-5", ...} │                              │                          │
-       │──────────────────────────────>│                              │                          │
-       │                               │                              │                          │
-       │                  Can read:    │                              │                          │
-       │                  ✓ headers    │                              │                          │
-       │                  ✗ body       │                              │                          │
-       │                               │                              │                          │
-       │                  Translates tier into allowed models:        │                          │
-       │                    paid → X-Allowed-Models: gpt-oss-120b,kimi-k2-5                     │
-       │                    free → X-Allowed-Models: gpt-oss-120b                               │
-       │                               │                              │                          │
-       │                               │  Forwards headers:          │                          │
-       │                               │    X-Language: French        │                          │
-       │                               │    X-Allowed-Models: ...     │                          │
-       │                               │  Forwards encrypted body     │                          │
-       │                               │  (unchanged)                 │                          │
-       │                               │─────────────────────────────>│                          │
-       │                               │                              │                          │
-       │                               │                 Decrypts body                           │
-       │                               │                              │                          │
-       │                               │                 Can read:    │                          │
-       │                               │                 ✓ headers    │                          │
-       │                               │                 ✓ body       │                          │
-       │                               │                              │                          │
-       │                               │                 1. Read model from body: "kimi-k2-5"   │
-       │                               │                    Check against X-Allowed-Models ✓    │
-       │                               │                              │                          │
-       │                               │                 2. Inject system prompt:               │
-       │                               │                    "Always respond in French."         │
-       │                               │                    (from SYSTEM_PROMPT_TEMPLATE secret)│
-       │                               │                              │                          │
-       │                               │                 3. Forward modified request            │
-       │                               │                              │  {model, messages        │
-       │                               │                              │   + system prompt}       │
-       │                               │                              │─────────────────────────>│
-       │                               │                              │                          │
-       │                               │                              │<─────────────────────────│
-       │                               │<─────────────────────────────│     (encrypted response) │
-       │<──────────────────────────────│          encrypted response  │                          │
-       │                               │                              │                          │
-```
+![Request flow diagram](request-flow.jpeg)
 
 **What each party can see:**
 
