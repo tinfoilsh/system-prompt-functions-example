@@ -115,8 +115,8 @@ func proxyHandler(w http.ResponseWriter, r *http.Request) {
 	w.WriteHeader(resp.StatusCode)
 
 	if flusher, ok := w.(http.Flusher); ok {
-		fw := flushWriter{ResponseWriter: w, Flusher: flusher}
-		if _, copyErr := io.Copy(&fw, resp.Body); copyErr != nil {
+		fw := &flushWriter{w: w, f: flusher}
+		if _, copyErr := io.Copy(fw, resp.Body); copyErr != nil {
 			log.Printf("stream copy failed: %v", copyErr)
 		}
 	} else {
@@ -132,15 +132,13 @@ func proxyHandler(w http.ResponseWriter, r *http.Request) {
 }
 
 type flushWriter struct {
-	http.ResponseWriter
-	http.Flusher
+	w io.Writer
+	f http.Flusher
 }
 
 func (fw *flushWriter) Write(p []byte) (int, error) {
-	n, err := fw.ResponseWriter.Write(p)
-	if fw.Flusher != nil {
-		fw.Flush()
-	}
+	n, err := fw.w.Write(p)
+	fw.f.Flush()
 	return n, err
 }
 

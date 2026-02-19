@@ -1,3 +1,3 @@
-module proxy-example
+module system-prompt-injector-proxy
 
-go 1.21
+go 1.25

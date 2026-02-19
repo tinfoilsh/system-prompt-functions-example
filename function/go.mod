@@ -1,3 +1,3 @@
-module system-prompt-function
+module system-prompt-injector
 
-go 1.21
+go 1.25

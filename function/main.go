@@ -96,7 +96,7 @@ func chatHandler(w http.ResponseWriter, r *http.Request) {
 	}
 	systemPrompt := strings.ReplaceAll(promptTemplate, "{{LANGUAGE}}", language)
 
-	// 5. Prepend system message
+	// 6. Prepend system message
 	messages, _ := reqBody["messages"].([]interface{})
 	systemMessage := map[string]interface{}{
 		"role":    "system",
@@ -104,12 +104,12 @@ func chatHandler(w http.ResponseWriter, r *http.Request) {
 	}
 	reqBody["messages"] = append([]interface{}{systemMessage}, messages...)
 
-	// 6. Override model if configured
+	// 7. Override model if configured
 	if model := os.Getenv("TINFOIL_MODEL"); model != "" {
 		reqBody["model"] = model
 	}
 
-	// 7. Marshal modified body
+	// 8. Marshal modified body
 	modifiedBody, err := json.Marshal(reqBody)
 	if err != nil {
 		log.Printf("Failed to marshal modified body: %v", err)
@@ -117,7 +117,7 @@ func chatHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// 8. Forward to inference (plain HTTPS — already inside the enclave)
+	// 9. Forward to inference (plain HTTPS — already inside the enclave)
 	inferenceURL := os.Getenv("TINFOIL_INFERENCE_URL")
 	if inferenceURL == "" {
 		http.Error(w, "TINFOIL_INFERENCE_URL not configured", http.StatusInternalServerError)
@@ -151,7 +151,7 @@ func chatHandler(w http.ResponseWriter, r *http.Request) {
 	}
 	defer resp.Body.Close()
 
-	// 9. Stream response back — tfshim re-encrypts via EHBP transparently
+	// 10. Stream response back — tfshim re-encrypts via EHBP transparently
 	if ct := resp.Header.Get("Content-Type"); ct != "" {
 		w.Header().Set("Content-Type", ct)
 	}
