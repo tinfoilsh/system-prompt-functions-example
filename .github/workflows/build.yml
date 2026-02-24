@@ -3,7 +3,17 @@ name: Docker Build and Publish
 on:
   push:
     tags:
-      - 'v*'
+      - 'release-v*'
+  workflow_dispatch:
+    inputs:
+      version:
+        description: "Release version (vX.Y.Z or X.Y.Z)"
+        required: true
+        type: string
+
+concurrency:
+  group: release-${{ github.repository }}
+  cancel-in-progress: false
 
 jobs:
   docker-build:
@@ -12,14 +22,56 @@ jobs:
       contents: read
       packages: write
     outputs:
+      version: ${{ steps.version.outputs.version }}
+      version_tag: ${{ steps.version.outputs.version_tag }}
+      major_minor: ${{ steps.version.outputs.major_minor }}
+      source_sha: ${{ steps.source.outputs.sha }}
       digest: ${{ steps.build.outputs.digest }}
 
     steps:
-      - name: Checkout repository
+      - name: Resolve release version
+        id: version
+        run: |
+          set -euo pipefail
+          RAW_VERSION="${{ github.event.inputs.version }}"
+          if [ -z "$RAW_VERSION" ]; then
+            RAW_VERSION="${GITHUB_REF_NAME}"
+          fi
+
+          if [[ "$RAW_VERSION" == release-v* ]]; then
+            VERSION_TAG="${RAW_VERSION#release-}"
+          else
+            VERSION_TAG="$RAW_VERSION"
+          fi
+
+          if [[ "$VERSION_TAG" != v* ]]; then
+            VERSION_TAG="v${VERSION_TAG}"
+          fi
+
+          if [[ "$VERSION_TAG" =~ ^v([0-9]+)\.([0-9]+)\.([0-9]+)$ ]]; then
+            VERSION="${VERSION_TAG#v}"
+            MAJOR_MINOR="${BASH_REMATCH[1]}.${BASH_REMATCH[2]}"
+          else
+            echo "::error::Version must match vX.Y.Z"
+            exit 1
+          fi
+
+          echo "version_tag=${VERSION_TAG}" >> "$GITHUB_OUTPUT"
+          echo "version=${VERSION}" >> "$GITHUB_OUTPUT"
+          echo "major_minor=${MAJOR_MINOR}" >> "$GITHUB_OUTPUT"
+
+      - name: Checkout main
         uses: actions/checkout@8e8c483db84b4bee98b60c0593521ed34d9990e8  # v6.0.1
+        with:
+          ref: refs/heads/main
+          fetch-depth: 0
 
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@8d2750c68a42422c14e847fe6c8ac0403b4cbd6f #v3.12.0
+
+      - name: Capture source SHA
+        id: source
+        run: echo "sha=$(git rev-parse HEAD)" >> "$GITHUB_OUTPUT"
 
       - name: Log in to GitHub Container Registry
         uses: docker/login-action@5e57cd118135c172c3672efd75eb46360885c0ef # v3.6.0
@@ -34,9 +86,8 @@ jobs:
         with:
           images: ghcr.io/tinfoilsh/system-prompt-injector
           tags: |
-            type=semver,pattern={{version}}
-            type=semver,pattern={{major}}.{{minor}}
-            type=sha,format=short
+            type=raw,value=${{ steps.version.outputs.version }}
+            type=raw,value=${{ steps.version.outputs.major_minor }}
 
       - name: Build and push Docker image
         id: build
@@ -61,34 +112,106 @@ jobs:
 
     steps:
       - uses: actions/checkout@8e8c483db84b4bee98b60c0593521ed34d9990e8  # v6.0.1
+        with:
+          ref: ${{ needs.docker-build.outputs.source_sha }}
+          fetch-depth: 0
+
+      - name: Ensure main has not moved since image build
+        run: |
+          set -euo pipefail
+          git fetch origin main
+          CURRENT_MAIN="$(git rev-parse origin/main)"
+          SOURCE_SHA="${{ needs.docker-build.outputs.source_sha }}"
+          if [ "$CURRENT_MAIN" != "$SOURCE_SHA" ]; then
+            echo "::error::main moved from ${SOURCE_SHA} to ${CURRENT_MAIN}; rerun the release."
+            exit 1
+          fi
 
       - name: Pin image digest in config
+        id: pin
         env:
           CONTAINER_IMAGE: ghcr.io/tinfoilsh/system-prompt-injector
         run: |
-          VERSION="${GITHUB_REF_NAME#v}"
+          VERSION="${{ needs.docker-build.outputs.version }}"
           DIGEST="${{ needs.docker-build.outputs.digest }}"
           sed -i "s|${CONTAINER_IMAGE}:[^\"]*|${CONTAINER_IMAGE}:${VERSION}@${DIGEST}|" tinfoil-config.yml
           echo "Updated image to: ${CONTAINER_IMAGE}:${VERSION}@${DIGEST}"
+          if git diff --quiet -- tinfoil-config.yml; then
+            echo "changed=false" >> "$GITHUB_OUTPUT"
+          else
+            echo "changed=true" >> "$GITHUB_OUTPUT"
+          fi
           cat tinfoil-config.yml
 
       - name: Update config on main via PR
+        if: steps.pin.outputs.changed == 'true'
+        id: update-config
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
-          BRANCH="ci/pin-image-${{ github.ref_name }}"
+          set -euo pipefail
+          BRANCH="ci/pin-image-${{ needs.docker-build.outputs.version_tag }}-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}"
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           git checkout -b "$BRANCH"
           git add tinfoil-config.yml
-          git commit -m "ci: pin image to ${{ github.ref_name }}"
+          git commit -m "ci: pin image to ${{ needs.docker-build.outputs.version_tag }}"
           git push origin "$BRANCH"
-          PR_URL=$(gh pr create --title "ci: pin image to ${{ github.ref_name }}" --body "Auto-generated: pins image tag and SHA256 digest from CI build." --base main --head "$BRANCH")
+          PR_URL=$(gh pr create --title "ci: pin image to ${{ needs.docker-build.outputs.version_tag }}" --body "Auto-generated: pins image tag and SHA256 digest from CI build." --base main --head "$BRANCH")
           PR_NUM=${PR_URL##*/}
           gh api "repos/${{ github.repository }}/pulls/${PR_NUM}/merge" -X PUT -f merge_method=rebase
           git push origin --delete "$BRANCH"
+          git fetch origin main
+          echo "main_sha=$(git rev-parse origin/main)" >> "$GITHUB_OUTPUT"
+
+      - name: Capture main SHA when config is unchanged
+        if: steps.pin.outputs.changed == 'false'
+        id: unchanged-main
+        run: echo "main_sha=$(git rev-parse HEAD)" >> "$GITHUB_OUTPUT"
+
+      - name: Select final release SHA
+        id: final
+        run: |
+          if [ "${{ steps.pin.outputs.changed }}" = "true" ]; then
+            echo "main_sha=${{ steps.update-config.outputs.main_sha }}" >> "$GITHUB_OUTPUT"
+          else
+            echo "main_sha=${{ steps.unchanged-main.outputs.main_sha }}" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Checkout final release commit
+        run: |
+          git fetch origin main
+          git checkout --detach "${{ steps.final.outputs.main_sha }}"
+
+      - name: Create immutable release tag
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -euo pipefail
+          TAG="${{ needs.docker-build.outputs.version_tag }}"
+          SHA="${{ steps.final.outputs.main_sha }}"
+          if EXISTING_SHA=$(gh api "repos/${{ github.repository }}/git/ref/tags/${TAG}" --jq '.object.sha' 2>/dev/null); then
+            if [ "$EXISTING_SHA" != "$SHA" ]; then
+              echo "::error::Tag ${TAG} already exists at ${EXISTING_SHA}; refusing to move it."
+              exit 1
+            fi
+            echo "Tag ${TAG} already exists at expected SHA ${SHA}"
+            exit 0
+          fi
+          gh api "repos/${{ github.repository }}/git/refs" -X POST -f ref="refs/tags/${TAG}" -f sha="${SHA}"
+
+      - name: Delete request tag
+        if: startsWith(github.ref, 'refs/tags/release-v')
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: gh api "repos/${{ github.repository }}/git/refs/tags/${{ github.ref_name }}" -X DELETE || true
 
       - uses: tinfoilsh/pri-build-action@5d450a7f30904866efc401e24484b935b7ed52dd # v0.6.1
+        env:
+          GITHUB_REF: refs/tags/${{ needs.docker-build.outputs.version_tag }}
+          GITHUB_REF_NAME: ${{ needs.docker-build.outputs.version_tag }}
+          GITHUB_REF_TYPE: tag
+          GITHUB_SHA: ${{ steps.final.outputs.main_sha }}
         with:
           config-file: ${{ github.workspace }}/tinfoil-config.yml
           github-token: ${{ secrets.GITHUB_TOKEN }}
