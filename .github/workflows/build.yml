@@ -84,7 +84,7 @@ jobs:
           git commit -m "ci: pin image to ${{ github.ref_name }}"
           git push origin "$BRANCH"
           gh pr create --title "ci: pin image to ${{ github.ref_name }}" --body "Auto-generated: pins image tag and SHA256 digest from CI build." --base main --head "$BRANCH"
-          gh pr merge "$BRANCH" --auto --squash
+          gh pr merge "$BRANCH" --squash --delete-branch
 
       - uses: tinfoilsh/pri-build-action@5d450a7f30904866efc401e24484b935b7ed52dd # v0.6.1
         with:
