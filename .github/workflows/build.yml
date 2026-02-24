@@ -11,6 +11,8 @@ jobs:
     permissions:
       contents: read
       packages: write
+    outputs:
+      digest: ${{ steps.build.outputs.digest }}
 
     steps:
       - name: Checkout repository
@@ -37,6 +39,7 @@ jobs:
             type=sha,format=short
 
       - name: Build and push Docker image
+        id: build
         uses: docker/build-push-action@263435318d21b8e681c14492fe198d362a7d2c83 #v6.18.0
         env:
           SOURCE_DATE_EPOCH: 0
@@ -57,6 +60,17 @@ jobs:
 
     steps:
       - uses: actions/checkout@8e8c483db84b4bee98b60c0593521ed34d9990e8  # v6.0.1
+
+      - name: Pin image digest in config
+        env:
+          CONTAINER_IMAGE: ghcr.io/tinfoilsh/system-prompt-injector
+        run: |
+          VERSION="${GITHUB_REF_NAME#v}"
+          DIGEST="${{ needs.docker-build.outputs.digest }}"
+          sed -i "s|${CONTAINER_IMAGE}:[^\"]*|${CONTAINER_IMAGE}:${VERSION}@${DIGEST}|" tinfoil-config.yml
+          echo "Updated image to: ${CONTAINER_IMAGE}:${VERSION}@${DIGEST}"
+          cat tinfoil-config.yml
+
       - uses: tinfoilsh/pri-build-action@5d450a7f30904866efc401e24484b935b7ed52dd # v0.6.1
         with:
           config-file: ${{ github.workspace }}/tinfoil-config.yml
